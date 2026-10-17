@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Farm Bot - ThingSpeak IoT Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0b1329;
+            color: #f8fafc;
+        }
+
+        .font-mono {
+            font-family: 'JetBrains+Mono', monospace;
+        }
+
+        .glass-card {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .glass-card-hover:hover {
+            border-color: rgba(16, 185, 129, 0.4);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0b1329;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- TOP HEADER -->
+    <header class="glass-card sticky top-0 z-40 border-b border-slate-800/80 bg-slate-900/90 px-4 lg:px-8 py-3.5 flex flex-wrap justify-between items-center gap-4">
+        <div class="flex items-center gap-3">
+            <div class="p-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl">
+                <i data-lucide="bot" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg text-white flex items-center gap-2">
+                    Smart Farm Bot <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">ThingSpeak Live</span>
+                </h1>
+                <p class="text-xs text-slate-400">ThingSpeak REST Channel Telemetry</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 text-xs bg-slate-800/90 border border-slate-700/60 px-3 py-1.5 rounded-lg">
+                <span id="status-indicator" class="w-2.5 h-2.5 rounded-full bg-slate-500 animate-pulse"></span>
+                <span id="status-text" class="text-slate-300 font-medium">Initializing...</span>
+            </div>
+
+            <button onclick="openConfigModal()" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs px-3.5 py-2 rounded-lg transition-all shadow-lg shadow-emerald-600/20 active:scale-95">
+                <i data-lucide="settings" class="w-4 h-4"></i>
+                <span>Configure API & Fields</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN CONTAINER -->
+    <main class="flex-1 p-4 lg:p-8 max-w-[1600px] w-full mx-auto space-y-6">
+
+        <!-- CONFIG WARNING IF NO CHANNEL SET -->
+        <div id="no-config-alert" class="hidden glass-card border-amber-500/30 bg-amber-500/10 p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-4">
+                <div class="p-3 bg-amber-500/20 text-amber-400 rounded-xl">
+                    <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-amber-200 text-sm">ThingSpeak Channel Not Configured</h3>
+                    <p class="text-xs text-slate-300 mt-0.5">Enter your ThingSpeak Channel ID and API Read Key to display your live sensor telemetry.</p>
+                </div>
+            </div>
+            <button onclick="openConfigModal()" class="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs rounded-lg transition-all whitespace-nowrap">
+                Set Channel Keys
+            </button>
+        </div>
+
+        <!-- TELEMETRY METRICS CARDS (Dynamic Grid) -->
+        <div id="metrics-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Rendered dynamically based on configured fields -->
+        </div>
+
+        <!-- GRAPH ANALYTICS -->
+        <div class="glass-card rounded-2xl p-5 space-y-4">
+            <div class="flex flex-wrap justify-between items-center gap-4 border-b border-slate-800 pb-4">
+                <div class="flex items-center gap-2.5">
+                    <i data-lucide="line-chart" class="w-5 h-5 text-emerald-400"></i>
+                    <h2 class="font-semibold text-white text-base">ThingSpeak Time-Series Analysis</h2>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span id="historical-count-tag" class="text-xs text-emerald-400 font-mono bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">0 Historical Points</span>
+                    <div class="flex items-center gap-1.5 bg-slate-800/80 border border-slate-700/80 rounded-lg px-2 py-1">
+                        <span class="text-xs text-slate-400">Refresh:</span>
+                        <select id="auto-refresh-select" onchange="updateRefreshInterval(this.value)" class="bg-transparent text-xs text-slate-200 focus:outline-none">
+                            <option value="15000" class="bg-slate-900" selected>15 seconds</option>
+                            <option value="30000" class="bg-slate-900">30 seconds</option>
+                            <option value="60000" class="bg-slate-900">1 minute</option>
+                        </select>
+                    </div>
+                    <button onclick="fetchLiveData(true)" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-all border border-slate-700" title="Reload All Data">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- CANVAS -->
+            <div class="relative h-[380px] w-full">
+                <canvas id="telemetryChart"></canvas>
+            </div>
+        </div>
+
+        <!-- CONTROLS & LOGS -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- ACTUATOR CONTROL PANEL -->
+            <div class="glass-card rounded-2xl p-5 space-y-4 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center gap-2.5 border-b border-slate-800 pb-3 mb-4">
+                        <i data-lucide="gamepad-2" class="w-5 h-5 text-emerald-400"></i>
+                        <h2 class="font-semibold text-white text-base">Subsystem Controls</h2>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="toggleActuator('pump')" id="btn-pump" class="p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600">
+                            <div class="flex items-center gap-2.5">
+                                <i data-lucide="droplet" class="w-4 h-4 text-slate-400" id="icon-pump"></i>
+                                <span class="text-xs font-medium text-slate-200">Water Pump</span>
+                            </div>
+                            <span id="badge-pump" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 font-mono">OFF</span>
+                        </button>
+
+                        <button onclick="toggleActuator('uv')" id="btn-uv" class="p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600">
+                            <div class="flex items-center gap-2.5">
+                                <i data-lucide="sun" class="w-4 h-4 text-slate-400" id="icon-uv"></i>
+                                <span class="text-xs font-medium text-slate-200">UV Sterilizer</span>
+                            </div>
+                            <span id="badge-uv" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 font-mono">OFF</span>
+                        </button>
+
+                        <button onclick="toggleActuator('repeller')" id="btn-repeller" class="p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600">
+                            <div class="flex items-center gap-2.5">
+                                <i data-lucide="volume-2" class="w-4 h-4 text-slate-400" id="icon-repeller"></i>
+                                <span class="text-xs font-medium text-slate-200">Pest Repeller</span>
+                            </div>
+                            <span id="badge-repeller" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 font-mono">OFF</span>
+                        </button>
+
+                        <button onclick="toggleActuator('lights')" id="btn-lights" class="p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600">
+                            <div class="flex items-center gap-2.5">
+                                <i data-lucide="lightbulb" class="w-4 h-4 text-slate-400" id="icon-lights"></i>
+                                <span class="text-xs font-medium text-slate-200">Headlights</span>
+                            </div>
+                            <span id="badge-lights" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 font-mono">OFF</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="pt-3 border-t border-slate-800/80 text-[11px] text-slate-400 flex items-center justify-between">
+                    <span>ThingSpeak Sync:</span>
+                    <span id="last-update-time" class="font-mono text-slate-300">Never</span>
+                </div>
+            </div>
+
+            <!-- LOG DATA TABLE -->
+            <div class="glass-card rounded-2xl p-5 lg:col-span-2 space-y-4">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                    <div class="flex items-center gap-2.5">
+                        <i data-lucide="database" class="w-5 h-5 text-emerald-400"></i>
+                        <h2 class="font-semibold text-white text-base">Historical Entry Records</h2>
+                    </div>
+                    <span id="log-count" class="text-xs text-slate-400 font-mono">0 entries</span>
+                </div>
+
+                <div class="overflow-x-auto max-h-[220px]">
+                    <table class="w-full text-left text-xs">
+                        <thead class="text-slate-400 uppercase bg-slate-800/60 sticky top-0 font-mono">
+                            <tr id="logs-table-header">
+                                <th class="py-2.5 px-3">Entry ID</th>
+                                <th class="py-2.5 px-3">Timestamp</th>
+                                <!-- Dynamic headers inserted here -->
+                            </tr>
+                        </thead>
+                        <tbody id="logs-table-body" class="divide-y divide-slate-800 font-mono text-slate-300">
+                            <tr>
+                                <td colspan="10" class="py-8 text-center text-slate-500 italic">No channel data loaded yet. Configure your ThingSpeak Channel ID.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- CONFIGURATION MODAL -->
+    <div id="config-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+        <div class="glass-card bg-slate-900 border-slate-700 w-full max-w-2xl rounded-2xl p-6 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+            
+            <div class="flex justify-between items-center border-b border-slate-800 pb-4">
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
+                        <i data-lucide="sliders" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-white text-lg">ThingSpeak Settings & Dynamic Fields</h3>
+                        <p class="text-xs text-slate-400">Add or remove fields to match your ThingSpeak channel feeds</p>
+                    </div>
+                </div>
+                <button onclick="closeConfigModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form id="config-form" onsubmit="saveConfiguration(event)" class="space-y-5">
+                
+                <!-- THINGSPEAK CREDENTIALS -->
+                <div class="space-y-3 bg-slate-800/40 p-4 rounded-xl border border-slate-700/60">
+                    <h4 class="text-xs font-semibold text-emerald-400 uppercase tracking-wider">ThingSpeak Channel Credentials</h4>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Channel ID / Channel No <span class="text-rose-400">*</span></label>
+                            <input type="text" id="cfg-channel-id" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none" placeholder="e.g. 3499273">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Read API Key</label>
+                            <input type="text" id="cfg-read-key" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none" placeholder="Required for private channels">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DYNAMIC FIELD SETTINGS (ADD / DELETE) -->
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h4 class="text-xs font-semibold text-slate-200 uppercase tracking-wider">Configured Fields</h4>
+                            <p class="text-[11px] text-slate-400">Only configured fields will be rendered on graphs and cards</p>
+                        </div>
+                        <button type="button" onclick="addFieldRow()" class="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 font-medium bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20 transition-all active:scale-95">
+                            <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Field
+                        </button>
+                    </div>
+
+                    <!-- HEADERS -->
+                    <div class="grid grid-cols-12 gap-2 text-[10px] uppercase font-mono text-slate-400 px-2">
+                        <span class="col-span-3">ThingSpeak Key</span>
+                        <span class="col-span-4">Display Label</span>
+                        <span class="col-span-2">Unit</span>
+                        <span class="col-span-2">Color</span>
+                        <span class="col-span-1 text-center">Delete</span>
+                    </div>
+
+                    <div id="fields-list" class="space-y-2 max-h-[240px] overflow-y-auto pr-1">
+                        <!-- Dynamic Field Rows Render Here -->
+                    </div>
+                </div>
+
+                <!-- FOOTER BUTTONS -->
+                <div class="flex justify-end gap-3 border-t border-slate-800 pt-4">
+                    <button type="button" onclick="closeConfigModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow-lg shadow-emerald-600/20">
+                        Save & Sync Channel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN APP SCRIPT -->
+    <script>
+        // DEFAULT CONFIG
+        let config = {
+            baseUrl: "https://api.thingspeak.com",
+            channelId: "",
+            readKey: "",
+            fields: [
+                { key: "field1", name: "Distance (HC-SR04)", unit: "cm", color: "#f43f5e" }
+            ]
+        };
+
+        let chart = null;
+        let refreshTimer = null;
+        let refreshInterval = 15000;
+        let activeActuators = { pump: false, uv: false, repeller: false, lights: false };
+
+        document.addEventListener("DOMContentLoaded", () => {
+            loadConfigFromStorage();
+            initChart();
+            renderMetricsCards();
+            refreshIcons();
+
+            if (config.channelId) {
+                fetchLiveData(true); // Load all past entries initially
+                startAutoRefresh();
+            } else {
+                showNoConfigWarning(true);
+            }
+        });
+
+        function refreshIcons() {
+            lucide.createIcons();
+        }
+
+        function loadConfigFromStorage() {
+            const saved = localStorage.getItem("thingspeak_farmbot_config");
+            if (saved) {
+                try {
+                    config = JSON.parse(saved);
+                } catch(e) {
+                    console.error("Failed to load local config", e);
+                }
+            }
+        }
+
+        function saveConfiguration(e) {
+            e.preventDefault();
+            
+            config.channelId = document.getElementById("cfg-channel-id").value.trim();
+            config.readKey = document.getElementById("cfg-read-key").value.trim();
+
+            // Parse configured fields from form
+            const rows = document.querySelectorAll(".field-config-row");
+            const newFields = [];
+            rows.forEach((row, idx) => {
+                const key = row.querySelector(".field-key-input").value.trim();
+                const name = row.querySelector(".field-name-input").value.trim() || `Field ${idx + 1}`;
+                const unit = row.querySelector(".field-unit-input").value.trim() || "";
+                const color = row.querySelector(".field-color-input").value || "#10b981";
+                
+                if (key) {
+                    newFields.push({ key, name, unit, color });
+                }
+            });
+
+            config.fields = newFields;
+            localStorage.setItem("thingspeak_farmbot_config", JSON.stringify(config));
+
+            closeConfigModal();
+            renderMetricsCards();
+            updateChartStructure();
+            
+            if (config.channelId) {
+                showNoConfigWarning(false);
+                fetchLiveData(true); // reload historical
+                startAutoRefresh();
+            } else {
+                showNoConfigWarning(true);
+            }
+        }
+
+        // MODAL MANAGEMENT
+        function openConfigModal() {
+            document.getElementById("cfg-channel-id").value = config.channelId || "";
+            document.getElementById("cfg-read-key").value = config.readKey || "";
+
+            renderFieldConfigRows();
+            document.getElementById("config-modal").classList.remove("hidden");
+            refreshIcons();
+        }
+
+        function closeConfigModal() {
+            document.getElementById("config-modal").classList.add("hidden");
+        }
+
+        function renderFieldConfigRows() {
+            const container = document.getElementById("fields-list");
+            container.innerHTML = "";
+
+            if (config.fields.length === 0) {
+                addFieldRow();
+                return;
+            }
+
+            config.fields.forEach((field, index) => {
+                appendFieldRowHTML(container, field, index);
+            });
+            refreshIcons();
+        }
+
+        function addFieldRow() {
+            const container = document.getElementById("fields-list");
+            const newIndex = container.children.length + 1;
+            const palette = ["#f43f5e", "#10b981", "#3b82f6", "#f59e0b", "#8b5cf6", "#06b6d4"];
+            const newField = {
+                key: `field${newIndex}`,
+                name: `Sensor ${newIndex}`,
+                unit: "",
+                color: palette[(newIndex - 1) % palette.length]
+            };
+            appendFieldRowHTML(container, newField, newIndex);
+            refreshIcons();
+        }
+
+        function appendFieldRowHTML(container, field, index) {
+            const row = document.createElement("div");
+            row.className = "field-config-row grid grid-cols-12 gap-2 items-center bg-slate-800/60 p-2 rounded-xl border border-slate-700/50";
+            row.innerHTML = `
+                <div class="col-span-3">
+                    <input type="text" value="${field.key}" placeholder="field1" class="field-key-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none">
+                </div>
+                <div class="col-span-4">
+                    <input type="text" value="${field.name}" placeholder="Field Name" class="field-name-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none">
+                </div>
+                <div class="col-span-2">
+                    <input type="text" value="${field.unit}" placeholder="cm, %" class="field-unit-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none">
+                </div>
+                <div class="col-span-2 flex justify-center">
+                    <input type="color" value="${field.color || '#10b981'}" class="field-color-input w-9 h-7 bg-transparent cursor-pointer border-0 rounded">
+                </div>
+                <div class="col-span-1 flex justify-center">
+                    <button type="button" onclick="this.closest('.field-config-row').remove()" class="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            `;
+            container.appendChild(row);
+        }
+
+        // RENDER METRIC CARDS
+        function renderMetricsCards() {
+            const container = document.getElementById("metrics-grid");
+            container.innerHTML = "";
+
+            if (config.fields.length === 0) {
+                container.innerHTML = `<div class="col-span-full text-center py-6 text-slate-500 text-xs italic">No fields configured. Click "Configure API & Fields" to add metrics.</div>`;
+                return;
+            }
+
+            config.fields.forEach(field => {
+                const card = document.createElement("div");
+                card.className = "glass-card glass-card-hover rounded-2xl p-4 transition-all";
+                card.id = `card-${field.key}`;
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-xs font-medium text-slate-400">${field.name}</span>
+                        <div class="w-2.5 h-2.5 rounded-full" style="background-color: ${field.color}"></div>
+                    </div>
+                    <div class="flex items-baseline gap-1.5 mt-1">
+                        <span id="val-${field.key}" class="text-2xl font-bold font-mono text-white">--</span>
+                        <span class="text-xs text-slate-400 font-mono">${field.unit}</span>
+                    </div>
+                    <div class="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-500">
+                        <span>ThingSpeak Key: <code class="font-mono text-slate-400">${field.key}</code></span>
+                        <span id="trend-${field.key}" class="font-mono text-slate-400">--</span>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+            refreshIcons();
+        }
+
+        // CHART INIT
+        function initChart() {
+            const ctx = document.getElementById("telemetryChart").getContext("2d");
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: { labels: [], datasets: [] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#94a3b8', font: { family: 'Inter', size: 11 } }
+                        },
+                        tooltip: {
+                            backgroundColor: '#0f172a',
+                            titleColor: '#f8fafc',
+                            bodyColor: '#cbd5e1',
+                            borderColor: '#334155',
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+                        }
+                    }
+                }
+            });
+            updateChartStructure();
+        }
+
+        function updateChartStructure() {
+            if (!chart) return;
+            chart.data.labels = [];
+            chart.data.datasets = config.fields.map(field => ({
+                label: `${field.name} (${field.unit})`,
+                data: [],
+                borderColor: field.color,
+                backgroundColor: field.color + '15',
+                borderWidth: 2,
+                tension: 0.25,
+                fill: true,
+                pointRadius: 3,
+                fieldKey: field.key
+            }));
+            chart.update();
+        }
+
+        // FETCH DATA FROM THINGSPEAK API
+        async function fetchLiveData(fetchAll = false) {
+            if (!config.channelId) {
+                showNoConfigWarning(true);
+                return;
+            }
+
+            const statusInd = document.getElementById("status-indicator");
+            const statusTxt = document.getElementById("status-text");
+            statusInd.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
+            statusTxt.textContent = "Fetching...";
+
+            // Load all historical records (up to 8000 feeds) on initial fetch
+            const resultsCount = fetchAll ? 8000 : 100;
+            let url = `${config.baseUrl}/channels/${config.channelId}/feeds.json?results=${resultsCount}`;
+            if (config.readKey) {
+                url += `&api_key=${config.readKey}`;
+            }
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
+                
+                const data = await response.json();
+                if (data && data.feeds) {
+                    processFeedData(data.feeds);
+                    statusInd.className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+                    statusTxt.textContent = "Connected";
+                    document.getElementById("last-update-time").textContent = new Date().toLocaleTimeString();
+                    showNoConfigWarning(false);
+                } else {
+                    throw new Error("Invalid ThingSpeak API Response");
+                }
+            } catch (error) {
+                console.error("ThingSpeak Fetch Error:", error);
+                statusInd.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+                statusTxt.textContent = "Error / Offline";
+            }
+        }
+
+        function processFeedData(feeds) {
+            if (!feeds || feeds.length === 0) return;
+
+            document.getElementById("historical-count-tag").textContent = `${feeds.length} Historical Points`;
+
+            // 1. Metric Cards Update (Latest Value)
+            const latest = feeds[feeds.length - 1];
+            const prev = feeds.length > 1 ? feeds[feeds.length - 2] : null;
+
+            config.fields.forEach(field => {
+                const valElem = document.getElementById(`val-${field.key}`);
+                const trendElem = document.getElementById(`trend-${field.key}`);
+                
+                const rawVal = latest[field.key];
+                if (valElem && rawVal !== undefined && rawVal !== null) {
+                    const numVal = parseFloat(rawVal);
+                    valElem.textContent = isNaN(numVal) ? rawVal : numVal.toFixed(1);
+
+                    if (prev && prev[field.key] !== undefined) {
+                        const prevVal = parseFloat(prev[field.key]);
+                        if (!isNaN(numVal) && !isNaN(prevVal)) {
+                            const diff = numVal - prevVal;
+                            if (diff > 0) trendElem.innerHTML = `<span class="text-emerald-400">▲ +${diff.toFixed(1)}</span>`;
+                            else if (diff < 0) trendElem.innerHTML = `<span class="text-rose-400">▼ ${diff.toFixed(1)}</span>`;
+                            else trendElem.innerHTML = `<span class="text-slate-500">─ 0.0</span>`;
+                        }
+                    }
+                }
+            });
+
+            // 2. Plot All Feeds to Chart
+            chart.data.labels = feeds.map(f => {
+                const d = new Date(f.created_at);
+                return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+            });
+
+            chart.data.datasets.forEach(dataset => {
+                const k = dataset.fieldKey;
+                dataset.data = feeds.map(f => {
+                    const v = parseFloat(f[k]);
+                    return isNaN(v) ? null : v;
+                });
+            });
+
+            chart.update();
+
+            // 3. Render Table
+            renderLogsTable(feeds);
+        }
+
+        function renderLogsTable(feeds) {
+            const headerRow = document.getElementById("logs-table-header");
+            const tbody = document.getElementById("logs-table-body");
+
+            // Rebuild Table Headers strictly for Configured Fields
+            headerRow.innerHTML = `
+                <th class="py-2.5 px-3">Entry ID</th>
+                <th class="py-2.5 px-3">Timestamp</th>
+                ${config.fields.map(f => `<th class="py-2.5 px-3">${f.name} (${f.unit})</th>`).join("")}
+            `;
+
+            tbody.innerHTML = "";
+            const reversedFeeds = [...feeds].reverse().slice(0, 15); // Show latest 15 in table
+
+            reversedFeeds.forEach(feed => {
+                const tr = document.createElement("tr");
+                tr.className = "hover:bg-slate-800/50 transition-colors border-b border-slate-800/50";
+                
+                const formattedTime = new Date(feed.created_at).toLocaleString();
+                const fieldCols = config.fields.map(f => {
+                    const val = feed[f.key];
+                    const num = parseFloat(val);
+                    const display = (val === null || val === undefined) ? '--' : (isNaN(num) ? val : num.toFixed(1));
+                    return `<td class="py-2 px-3 text-slate-200">${display} <span class="text-[10px] text-slate-500">${f.unit}</span></td>`;
+                }).join("");
+
+                tr.innerHTML = `
+                    <td class="py-2 px-3 text-emerald-400 font-mono">#${feed.entry_id}</td>
+                    <td class="py-2 px-3 text-slate-400 whitespace-nowrap">${formattedTime}</td>
+                    ${fieldCols}
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById("log-count").textContent = `${feeds.length} total entries`;
+        }
+
+        function showNoConfigWarning(show) {
+            const alert = document.getElementById("no-config-alert");
+            if (show) alert.classList.remove("hidden");
+            else alert.classList.add("hidden");
+        }
+
+        function startAutoRefresh() {
+            if (refreshTimer) clearInterval(refreshTimer);
+            refreshTimer = setInterval(() => fetchLiveData(false), refreshInterval);
+        }
+
+        function updateRefreshInterval(val) {
+            refreshInterval = parseInt(val);
+            startAutoRefresh();
+        }
+
+        function toggleActuator(type) {
+            activeActuators[type] = !activeActuators[type];
+            const active = activeActuators[type];
+
+            const btn = document.getElementById(`btn-${type}`);
+            const badge = document.getElementById(`badge-${type}`);
+            const icon = document.getElementById(`icon-${type}`);
+
+            if (active) {
+                btn.className = "p-3.5 bg-emerald-500/10 border border-emerald-500/40 rounded-xl flex items-center justify-between text-left transition-all";
+                badge.className = "text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono font-bold";
+                badge.textContent = "ON";
+                icon.className = "w-4 h-4 text-emerald-400";
+            } else {
+                btn.className = "p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600";
+                badge.className = "text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 font-mono";
+                badge.textContent = "OFF";
+                icon.className = "w-4 h-4 text-slate-400";
+            }
+        }
+    </script>
+</body>
+</html>
