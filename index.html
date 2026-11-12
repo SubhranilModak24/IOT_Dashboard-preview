@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Farm Bot - Enterprise IoT Telemetry</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0b1329;
+            color: #f8fafc;
+        }
+
+        .font-mono {
+            font-family: 'JetBrains+Mono', monospace;
+        }
+
+        .glass-card {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .glass-card-hover:hover {
+            border-color: rgba(16, 185, 129, 0.4);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0b1329;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- TOP HEADER -->
+    <header class="glass-card sticky top-0 z-40 border-b border-slate-800/80 bg-slate-900/90 px-4 lg:px-8 py-3.5 flex flex-wrap justify-between items-center gap-4">
+        <div class="flex items-center gap-3">
+            <div class="p-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl">
+                <i data-lucide="bot" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg text-white flex items-center gap-2">
+                    Smart Farm Bot 
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">ThingSpeak + Firebase</span>
+                </h1>
+                <p class="text-xs text-slate-400">Persistent Cloud Telemetry & Edge Analytics</p>
+            </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+            <!-- Firebase Persistence Status -->
+            <div class="flex items-center gap-2 text-xs bg-slate-800/90 border border-slate-700/60 px-3 py-1.5 rounded-lg">
+                <span id="fb-status-indicator" class="w-2.5 h-2.5 rounded-full bg-slate-500 animate-pulse"></span>
+                <span id="fb-status-text" class="text-slate-300 font-medium">DB: Connecting...</span>
+            </div>
+
+            <!-- ThingSpeak Live Status -->
+            <div class="flex items-center gap-2 text-xs bg-slate-800/90 border border-slate-700/60 px-3 py-1.5 rounded-lg">
+                <span id="status-indicator" class="w-2.5 h-2.5 rounded-full bg-slate-500 animate-pulse"></span>
+                <span id="status-text" class="text-slate-300 font-medium">API: Initializing...</span>
+            </div>
+
+            <button id="btn-open-fields" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs px-3.5 py-2 rounded-lg transition-all shadow-lg shadow-emerald-600/20 active:scale-95">
+                <i data-lucide="sliders" class="w-4 h-4"></i>
+                <span>Configure Fields</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN CONTAINER -->
+    <main class="flex-1 p-4 lg:p-8 max-w-[1600px] w-full mx-auto space-y-6">
+
+        <!-- CONFIG.JS WARNING BANNER -->
+        <div id="no-config-alert" class="hidden glass-card border-amber-500/30 bg-amber-500/10 p-5 rounded-2xl flex items-center gap-4">
+            <div class="p-3 bg-amber-500/20 text-amber-400 rounded-xl">
+                <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h3 class="font-semibold text-amber-200 text-sm">Missing Credentials in <code class="font-mono bg-slate-900/80 px-1.5 py-0.5 rounded">config.js</code></h3>
+                <p id="config-alert-msg" class="text-xs text-slate-300 mt-0.5">
+                    Please populate <code class="font-mono">APP_CONFIG.thingspeak.channelId</code> and <code class="font-mono">APP_CONFIG.firebase</code> inside <code class="font-mono">config.js</code>.
+                </p>
+            </div>
+        </div>
+
+        <!-- TELEMETRY METRICS CARDS -->
+        <div id="metrics-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Rendered dynamically based on configured fields -->
+        </div>
+
+        <!-- GRAPH ANALYTICS -->
+        <div class="glass-card rounded-2xl p-5 space-y-4">
+            <div class="flex flex-wrap justify-between items-center gap-4 border-b border-slate-800 pb-4">
+                <div class="flex items-center gap-2.5">
+                    <i data-lucide="line-chart" class="w-5 h-5 text-emerald-400"></i>
+                    <h2 class="font-semibold text-white text-base">Retained Time-Series Analysis</h2>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <span id="historical-count-tag" class="text-xs text-emerald-400 font-mono bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">0 Retained Points</span>
+                    <div class="flex items-center gap-1.5 bg-slate-800/80 border border-slate-700/80 rounded-lg px-2 py-1">
+                        <span class="text-xs text-slate-400">Poll Rate:</span>
+                        <select id="auto-refresh-select" class="bg-transparent text-xs text-slate-200 focus:outline-none">
+                            <option value="15000" class="bg-slate-900" selected>15 seconds</option>
+                            <option value="30000" class="bg-slate-900">30 seconds</option>
+                            <option value="60000" class="bg-slate-900">1 minute</option>
+                        </select>
+                    </div>
+                    <button id="btn-force-sync" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-all border border-slate-700" title="Force Full Sync (Firebase + ThingSpeak)">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- CANVAS -->
+            <div class="relative h-[380px] w-full">
+                <canvas id="telemetryChart"></canvas>
+            </div>
+        </div>
+
+        <!-- CONTROLS & LOGS -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- ACTUATOR CONTROL PANEL -->
+            <div class="glass-card rounded-2xl p-5 space-y-4 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center gap-2.5 border-b border-slate-800 pb-3 mb-4">
+                        <i data-lucide="gamepad-2" class="w-5 h-5 text-emerald-400"></i>
+                        <h2 class="font-semibold text-white text-base">Subsystem Controls</h2>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <button data-actuator="pump" id="btn-pump" class="actuator-btn p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600">
+                            <div class="flex items-center gap-2.5">
+                                <i data-lucide="droplet" class="w-4 h-4 text-slate-400" id="icon-pump"></i>
+                                <span class="text-xs font-medium text-slate-200">Water Pump</span>
+                            </div>
+                            <span id="badge-pump" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 font-mono">OFF</span>
+                        </button>
+
+                        <button data-actuator="uv" id="btn-uv" class="actuator-btn p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600">
+                            <div class="flex items-center gap-2.5">
+                                <i data-lucide="sun" class="w-4 h-4 text-slate-400" id="icon-uv"></i>
+                                <span class="text-xs font-medium text-slate-200">UV Sterilizer</span>
+                            </div>
+                            <span id="badge-uv" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 font-mono">OFF</span>
+                        </button>
+
+                        <button data-actuator="repeller" id="btn-repeller" class="actuator-btn p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600">
+                            <div class="flex items-center gap-2.5">
+                                <i data-lucide="volume-2" class="w-4 h-4 text-slate-400" id="icon-repeller"></i>
+                                <span class="text-xs font-medium text-slate-200">Pest Repeller</span>
+                            </div>
+                            <span id="badge-repeller" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 font-mono">OFF</span>
+                        </button>
+
+                        <button data-actuator="lights" id="btn-lights" class="actuator-btn p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600">
+                            <div class="flex items-center gap-2.5">
+                                <i data-lucide="lightbulb" class="w-4 h-4 text-slate-400" id="icon-lights"></i>
+                                <span class="text-xs font-medium text-slate-200">Headlights</span>
+                            </div>
+                            <span id="badge-lights" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 font-mono">OFF</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="pt-3 border-t border-slate-800/80 space-y-1 text-[11px] text-slate-400">
+                    <div class="flex items-center justify-between">
+                        <span>Last ThingSpeak Poll:</span>
+                        <span id="last-update-time" class="font-mono text-slate-300">Never</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span>Last Firestore Archival:</span>
+                        <span id="last-db-sync-time" class="font-mono text-emerald-400">Pending</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LOG DATA TABLE -->
+            <div class="glass-card rounded-2xl p-5 lg:col-span-2 space-y-4">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                    <div class="flex items-center gap-2.5">
+                        <i data-lucide="database" class="w-5 h-5 text-emerald-400"></i>
+                        <h2 class="font-semibold text-white text-base">Persisted Entry Records</h2>
+                    </div>
+                    <span id="log-count" class="text-xs text-slate-400 font-mono">0 entries</span>
+                </div>
+
+                <div class="overflow-x-auto max-h-[220px]">
+                    <table class="w-full text-left text-xs">
+                        <thead class="text-slate-400 uppercase bg-slate-800/60 sticky top-0 font-mono">
+                            <tr id="logs-table-header">
+                                <th class="py-2.5 px-3">Entry ID</th>
+                                <th class="py-2.5 px-3">Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logs-table-body" class="divide-y divide-slate-800 font-mono text-slate-300">
+                            <tr>
+                                <td colspan="10" class="py-8 text-center text-slate-500 italic">Loading telemetry history from Firebase & ThingSpeak...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- FIELD DISPLAY CONFIGURATION MODAL (Credentials removed) -->
+    <div id="config-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+        <div class="glass-card bg-slate-900 border-slate-700 w-full max-w-2xl rounded-2xl p-6 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+            
+            <div class="flex justify-between items-center border-b border-slate-800 pb-4">
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
+                        <i data-lucide="sliders" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-white text-lg">Sensor Field Visualization</h3>
+                        <p class="text-xs text-slate-400">Map ThingSpeak feed keys to labels, units, and chart colors</p>
+                    </div>
+                </div>
+                <button type="button" id="btn-close-modal" class="text-slate-400 hover:text-white p-1 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form id="config-form" class="space-y-5">
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h4 class="text-xs font-semibold text-slate-200 uppercase tracking-wider">Active Telemetry Fields</h4>
+                            <p class="text-[11px] text-slate-400">API credentials are managed securely inside <code class="font-mono text-emerald-400">config.js</code></p>
+                        </div>
+                        <button type="button" id="btn-add-field" class="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 font-medium bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20 transition-all active:scale-95">
+                            <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Field
+                        </button>
+                    </div>
+
+                    <!-- HEADERS -->
+                    <div class="grid grid-cols-12 gap-2 text-[10px] uppercase font-mono text-slate-400 px-2">
+                        <span class="col-span-3">ThingSpeak Key</span>
+                        <span class="col-span-4">Display Label</span>
+                        <span class="col-span-2">Unit</span>
+                        <span class="col-span-2">Color</span>
+                        <span class="col-span-1 text-center">Delete</span>
+                    </div>
+
+                    <div id="fields-list" class="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                        <!-- Dynamic Field Rows Render Here -->
+                    </div>
+                </div>
+
+                <!-- FOOTER BUTTONS -->
+                <div class="flex justify-between items-center border-t border-slate-800 pt-4">
+                    <button type="button" id="btn-reset-fields" class="text-xs text-slate-400 hover:text-amber-400 transition-colors">
+                        Reset to config.js defaults
+                    </button>
+                    <div class="flex gap-3">
+                        <button type="button" id="btn-cancel-modal" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow-lg shadow-emerald-600/20">
+                            Apply Display Settings
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- APPLICATION MODULE -->
+    <script type="module">
+        import { loadConfig } from "./config.js";
+
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+        import {
+            getFirestore,
+            collection,
+            doc,
+            getDocs,
+            writeBatch,
+            query,
+            where,
+            orderBy
+        } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+
+        // ====================================================================
+        // STATE MANAGEMENT
+        // ====================================================================
+        let APP_CONFIG = null; // Added for remote configuration loading
+        let db = null;
+        let activeFields = [];
+        let chart = null;
+        let refreshTimer = null;
+        let refreshInterval = 15000;
+        let activeActuators = { pump: false, uv: false, repeller: false, lights: false };
+
+        // Deduplicated store keyed by numeric entry_id -> feed object
+        const telemetryStore = new Map();
+
+        // ====================================================================
+        // BOOTSTRAP
+        // ====================================================================
+        document.addEventListener("DOMContentLoaded", async () => {
+    // 1. Fetch environment variables dynamically from Vercel backend function first
+    APP_CONFIG = await loadConfig();
+
+    bindEvents();
+    loadFieldPreferences();
+    initChart();
+    renderMetricsCards();
+    lucide.createIcons();
+
+    const validConfig = validateConfig();
+    if (!validConfig) return;
+
+    initFirebase();
+
+    // 2. Hydrate historical data from Firestore first (fast local/cloud cache)
+    await loadHistoryFromFirestore();
+
+    // 3. Fetch live/historical delta from ThingSpeak and persist new entries
+    await syncThingSpeakAndPersist(true);
+
+    // 4. Start polling loop
+    startAutoRefresh();
+});
+
+        function validateConfig() {
+            const tsId = APP_CONFIG?.thingspeak?.channelId;
+            const fbKey = APP_CONFIG?.firebase?.apiKey;
+            const fbProject = APP_CONFIG?.firebase?.projectId;
+
+            if (!tsId || tsId.includes("YOUR_")) {
+                showConfigWarning("ThingSpeak Channel ID is not set in config.js.");
+                return false;
+            }
+            if (!fbKey || fbKey.includes("YOUR_") || !fbProject || fbProject.includes("your-project")) {
+                showConfigWarning("Firebase configuration is incomplete in config.js.");
+                return false;
+            }
+            document.getElementById("no-config-alert").classList.add("hidden");
+            return true;
+        }
+
+        function showConfigWarning(message) {
+            const alertBox = document.getElementById("no-config-alert");
+            document.getElementById("config-alert-msg").textContent = message;
+            alertBox.classList.remove("hidden");
+            setApiStatus("bg-amber-500", "API: Unconfigured");
+            setDbStatus("bg-amber-500", "DB: Unconfigured");
+        }
+
+        function initFirebase() {
+            try {
+                const app = initializeApp(APP_CONFIG.firebase);
+                db = getFirestore(app);
+                setDbStatus("bg-emerald-500", "DB: Firestore Ready");
+            } catch (err) {
+                console.error("Firebase Initialization Error:", err);
+                setDbStatus("bg-rose-500", "DB: Init Failed");
+            }
+        }
+
+        // ====================================================================
+        // FIRESTORE PERSISTENCE LAYER
+        // ====================================================================
+        async function loadHistoryFromFirestore() {
+            if (!db) return;
+
+            setDbStatus("bg-emerald-500 animate-pulse", "DB: Loading Archive...");
+            const colName = APP_CONFIG.firestoreCollection || "farmbot_telemetry";
+            const channelId = String(APP_CONFIG.thingspeak.channelId);
+
+            try {
+                const q = query(
+                    collection(db, colName),
+                    where("channel_id", "==", channelId),
+                    orderBy("entry_id", "asc")
+                );
+
+                const snapshot = await getDocs(q);
+                snapshot.forEach(docSnap => {
+                    const record = docSnap.data();
+                    if (record && record.entry_id !== undefined) {
+                        telemetryStore.set(Number(record.entry_id), record);
+                    }
+                });
+
+                renderAllTelemetry();
+                setDbStatus("bg-emerald-500", `DB: ${telemetryStore.size} Retained`);
+            } catch (err) {
+                console.error("Firestore Read Error (Check Firestore Rules / Composite Index):", err);
+                setDbStatus("bg-rose-500", "DB: Read Error");
+            }
+        }
+
+        async function persistNewFeedsToFirestore(newFeeds) {
+            if (!db || !newFeeds || newFeeds.length === 0) return;
+
+            const colName = APP_CONFIG.firestoreCollection || "farmbot_telemetry";
+            const channelId = String(APP_CONFIG.thingspeak.channelId);
+
+            // Firestore writeBatch supports up to 500 operations per batch
+            const BATCH_LIMIT = 450;
+            try {
+                for (let i = 0; i < newFeeds.length; i += BATCH_LIMIT) {
+                    const chunk = newFeeds.slice(i, i + BATCH_LIMIT);
+                    const batch = writeBatch(db);
+
+                    chunk.forEach(feed => {
+                        const entryId = Number(feed.entry_id);
+                        // Deterministic doc ID prevents duplicates across refreshes/clients
+                        const docId = `${channelId}_${entryId}`;
+                        const docRef = doc(db, colName, docId);
+
+                        batch.set(docRef, {
+                            ...feed,
+                            entry_id: entryId,
+                            channel_id: channelId,
+                            synced_at: new Date().toISOString()
+                        }, { merge: true });
+                    });
+
+                    await batch.commit();
+                }
+
+                setDbStatus("bg-emerald-500", `DB: ${telemetryStore.size} Retained`);
+                document.getElementById("last-db-sync-time").textContent = new Date().toLocaleTimeString();
+            } catch (err) {
+                console.error("Firestore Batch Write Error:", err);
+                setDbStatus("bg-rose-500", "DB: Write Failed");
+            }
+        }
+
+        // ====================================================================
+        // THINGSPEAK INGESTION + DEDUPLICATION
+        // ====================================================================
+        async function syncThingSpeakAndPersist(isInitialLoad = false) {
+            const { baseUrl, channelId, readKey, initialFetchCount, pollFetchCount } = APP_CONFIG.thingspeak;
+            if (!channelId) return;
+
+            setApiStatus("bg-emerald-500 animate-pulse", "API: Fetching...");
+
+            const count = isInitialLoad ? (initialFetchCount || 8000) : (pollFetchCount || 50);
+            let url = `${baseUrl}/channels/${channelId}/feeds.json?results=${count}`;
+            if (readKey) {
+                url += `&api_key=${encodeURIComponent(readKey)}`;
+            }
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                const data = await response.json();
+                if (!data || !Array.isArray(data.feeds)) {
+                    throw new Error("Malformed ThingSpeak response payload");
+                }
+
+                // Filter out feeds already retained in telemetryStore
+                const unseenFeeds = [];
+                data.feeds.forEach(feed => {
+                    const id = Number(feed.entry_id);
+                    if (!isNaN(id) && !telemetryStore.has(id)) {
+                        const normalized = { ...feed, entry_id: id };
+                        telemetryStore.set(id, normalized);
+                        unseenFeeds.push(normalized);
+                    }
+                });
+
+                // Persist only unseen records to Firebase
+                if (unseenFeeds.length > 0) {
+                    await persistNewFeedsToFirestore(unseenFeeds);
+                } else {
+                    document.getElementById("last-db-sync-time").textContent = `Up to date (${new Date().toLocaleTimeString()})`;
+                }
+
+                renderAllTelemetry();
+                setApiStatus("bg-emerald-500", "API: Connected");
+                document.getElementById("last-update-time").textContent = new Date().toLocaleTimeString();
+            } catch (err) {
+                console.error("ThingSpeak Sync Error:", err);
+                setApiStatus("bg-rose-500", "API: Offline / Error");
+            }
+        }
+
+        // ====================================================================
+        // UI RENDERING (CARDS, CHART, TABLE)
+        // ====================================================================
+        function renderAllTelemetry() {
+            // Sort chronologically by entry_id ascending
+            const sortedFeeds = Array.from(telemetryStore.values()).sort((a, b) => a.entry_id - b.entry_id);
+            if (sortedFeeds.length === 0) return;
+
+            document.getElementById("historical-count-tag").textContent = `${sortedFeeds.length} Retained Points`;
+
+            // 1. Update Latest Metric Cards
+            const latest = sortedFeeds[sortedFeeds.length - 1];
+            const prev = sortedFeeds.length > 1 ? sortedFeeds[sortedFeeds.length - 2] : null;
+
+            activeFields.forEach(field => {
+                const valElem = document.getElementById(`val-${field.key}`);
+                const trendElem = document.getElementById(`trend-${field.key}`);
+                const rawVal = latest[field.key];
+
+                if (valElem && rawVal !== undefined && rawVal !== null) {
+                    const numVal = parseFloat(rawVal);
+                    valElem.textContent = isNaN(numVal) ? rawVal : numVal.toFixed(1);
+
+                    if (prev && prev[field.key] !== undefined && prev[field.key] !== null) {
+                        const prevVal = parseFloat(prev[field.key]);
+                        if (!isNaN(numVal) && !isNaN(prevVal)) {
+                            const diff = numVal - prevVal;
+                            if (diff > 0) trendElem.innerHTML = `<span class="text-emerald-400">▲ +${diff.toFixed(1)}</span>`;
+                            else if (diff < 0) trendElem.innerHTML = `<span class="text-rose-400">▼ ${diff.toFixed(1)}</span>`;
+                            else trendElem.innerHTML = `<span class="text-slate-500">─ 0.0</span>`;
+                        }
+                    }
+                }
+            });
+
+            // 2. Update Chart
+            chart.data.labels = sortedFeeds.map(f => {
+                const d = new Date(f.created_at);
+                return `${d.toLocaleDateString([], { month: "short", day: "numeric" })} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+            });
+
+            chart.data.datasets.forEach(dataset => {
+                const k = dataset.fieldKey;
+                dataset.data = sortedFeeds.map(f => {
+                    const v = parseFloat(f[k]);
+                    return isNaN(v) ? null : v;
+                });
+            });
+            chart.update("none");
+
+            // 3. Update Table (Latest 25 entries)
+            renderLogsTable(sortedFeeds);
+        }
+
+        function renderLogsTable(sortedFeeds) {
+            const headerRow = document.getElementById("logs-table-header");
+            const tbody = document.getElementById("logs-table-body");
+
+            headerRow.innerHTML = `
+                <th class="py-2.5 px-3">Entry ID</th>
+                <th class="py-2.5 px-3">Timestamp</th>
+                ${activeFields.map(f => `<th class="py-2.5 px-3">${f.name} (${f.unit})</th>`).join("")}
+            `;
+
+            tbody.innerHTML = "";
+            const recentFeeds = [...sortedFeeds].reverse().slice(0, 25);
+
+            recentFeeds.forEach(feed => {
+                const tr = document.createElement("tr");
+                tr.className = "hover:bg-slate-800/50 transition-colors border-b border-slate-800/50";
+
+                const formattedTime = new Date(feed.created_at).toLocaleString();
+                const fieldCols = activeFields.map(f => {
+                    const val = feed[f.key];
+                    const num = parseFloat(val);
+                    const display = (val === null || val === undefined) ? "--" : (isNaN(num) ? val : num.toFixed(1));
+                    return `<td class="py-2 px-3 text-slate-200">${display} <span class="text-[10px] text-slate-500">${f.unit}</span></td>`;
+                }).join("");
+
+                tr.innerHTML = `
+                    <td class="py-2 px-3 text-emerald-400 font-mono">#${feed.entry_id}</td>
+                    <td class="py-2 px-3 text-slate-400 whitespace-nowrap">${formattedTime}</td>
+                    ${fieldCols}
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById("log-count").textContent = `${sortedFeeds.length} retained entries`;
+        }
+
+        function renderMetricsCards() {
+            const container = document.getElementById("metrics-grid");
+            container.innerHTML = "";
+
+            if (activeFields.length === 0) {
+                container.innerHTML = `<div class="col-span-full text-center py-6 text-slate-500 text-xs italic">No fields configured. Click "Configure Fields" to add metrics.</div>`;
+                return;
+            }
+
+            activeFields.forEach(field => {
+                const card = document.createElement("div");
+                card.className = "glass-card glass-card-hover rounded-2xl p-4 transition-all";
+                card.id = `card-${field.key}`;
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-xs font-medium text-slate-400">${field.name}</span>
+                        <div class="w-2.5 h-2.5 rounded-full" style="background-color: ${field.color}"></div>
+                    </div>
+                    <div class="flex items-baseline gap-1.5 mt-1">
+                        <span id="val-${field.key}" class="text-2xl font-bold font-mono text-white">--</span>
+                        <span class="text-xs text-slate-400 font-mono">${field.unit}</span>
+                    </div>
+                    <div class="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-500">
+                        <span>Feed Key: <code class="font-mono text-slate-400">${field.key}</code></span>
+                        <span id="trend-${field.key}" class="font-mono text-slate-400">--</span>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // ====================================================================
+        // CHART.JS SETUP
+        // ====================================================================
+        function initChart() {
+            const ctx = document.getElementById("telemetryChart").getContext("2d");
+            chart = new Chart(ctx, {
+                type: "line",
+                data: { labels: [], datasets: [] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: "index", intersect: false },
+                    plugins: {
+                        legend: {
+                            labels: { color: "#94a3b8", font: { family: "Inter", size: 11 } }
+                        },
+                        tooltip: {
+                            backgroundColor: "#0f172a",
+                            titleColor: "#f8fafc",
+                            bodyColor: "#cbd5e1",
+                            borderColor: "#334155",
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: "rgba(255, 255, 255, 0.05)" },
+                            ticks: { color: "#64748b", font: { family: "JetBrains Mono", size: 10 }, maxTicksLimit: 12 }
+                        },
+                        y: {
+                            grid: { color: "rgba(255, 255, 255, 0.05)" },
+                            ticks: { color: "#64748b", font: { family: "JetBrains Mono", size: 10 } }
+                        }
+                    }
+                }
+            });
+            updateChartStructure();
+        }
+
+        function updateChartStructure() {
+            if (!chart) return;
+            chart.data.datasets = activeFields.map(field => ({
+                label: `${field.name} (${field.unit})`,
+                data: [],
+                borderColor: field.color,
+                backgroundColor: field.color + "15",
+                borderWidth: 2,
+                tension: 0.25,
+                fill: true,
+                pointRadius: 2,
+                fieldKey: field.key
+            }));
+            chart.update();
+        }
+
+        // ====================================================================
+        // VISUAL FIELD PREFERENCES (NON-SENSITIVE UI STATE)
+        // ====================================================================
+        function loadFieldPreferences() {
+            const saved = localStorage.getItem("farmbot_field_preferences");
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        activeFields = parsed;
+                        return;
+                    }
+                } catch (e) {
+                    console.warn("Corrupt field preferences in localStorage, falling back to config.js");
+                }
+            }
+            activeFields = structuredClone(APP_CONFIG.defaultFields || []);
+        }
+
+        function saveFieldPreferences(e) {
+            e.preventDefault();
+            const rows = document.querySelectorAll(".field-config-row");
+            const updated = [];
+
+            rows.forEach((row, idx) => {
+                const key = row.querySelector(".field-key-input").value.trim();
+                const name = row.querySelector(".field-name-input").value.trim() || `Sensor ${idx + 1}`;
+                const unit = row.querySelector(".field-unit-input").value.trim() || "";
+                const color = row.querySelector(".field-color-input").value || "#10b981";
+                if (key) updated.push({ key, name, unit, color });
+            });
+
+            activeFields = updated;
+            localStorage.setItem("farmbot_field_preferences", JSON.stringify(activeFields));
+
+            closeConfigModal();
+            renderMetricsCards();
+            updateChartStructure();
+            renderAllTelemetry();
+        }
+
+        function openConfigModal() {
+            const container = document.getElementById("fields-list");
+            container.innerHTML = "";
+
+            if (activeFields.length === 0) {
+                addFieldRow();
+            } else {
+                activeFields.forEach(field => appendFieldRowHTML(container, field));
+            }
+            document.getElementById("config-modal").classList.remove("hidden");
+            lucide.createIcons();
+        }
+
+        function closeConfigModal() {
+            document.getElementById("config-modal").classList.add("hidden");
+        }
+
+        function addFieldRow() {
+            const container = document.getElementById("fields-list");
+            const idx = container.children.length + 1;
+            const palette = ["#f43f5e", "#10b981", "#3b82f6", "#f59e0b", "#8b5cf6", "#06b6d4"];
+            appendFieldRowHTML(container, {
+                key: `field${idx}`,
+                name: `Sensor ${idx}`,
+                unit: "",
+                color: palette[(idx - 1) % palette.length]
+            });
+            lucide.createIcons();
+        }
+
+        function appendFieldRowHTML(container, field) {
+            const row = document.createElement("div");
+            row.className = "field-config-row grid grid-cols-12 gap-2 items-center bg-slate-800/60 p-2 rounded-xl border border-slate-700/50";
+            row.innerHTML = `
+                <div class="col-span-3">
+                    <input type="text" value="${field.key}" placeholder="field1" class="field-key-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none">
+                </div>
+                <div class="col-span-4">
+                    <input type="text" value="${field.name}" placeholder="Field Name" class="field-name-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none">
+                </div>
+                <div class="col-span-2">
+                    <input type="text" value="${field.unit}" placeholder="cm, %" class="field-unit-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none">
+                </div>
+                <div class="col-span-2 flex justify-center">
+                    <input type="color" value="${field.color || "#10b981"}" class="field-color-input w-9 h-7 bg-transparent cursor-pointer border-0 rounded">
+                </div>
+                <div class="col-span-1 flex justify-center">
+                    <button type="button" class="btn-delete-field p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            `;
+            row.querySelector(".btn-delete-field").addEventListener("click", () => row.remove());
+            container.appendChild(row);
+        }
+
+        // ====================================================================
+        // HELPERS & EVENT BINDINGS
+        // ====================================================================
+        function setApiStatus(dotClasses, text) {
+            document.getElementById("status-indicator").className = `w-2.5 h-2.5 rounded-full ${dotClasses}`;
+            document.getElementById("status-text").textContent = text;
+        }
+
+        function setDbStatus(dotClasses, text) {
+            document.getElementById("fb-status-indicator").className = `w-2.5 h-2.5 rounded-full ${dotClasses}`;
+            document.getElementById("fb-status-text").textContent = text;
+        }
+
+        function startAutoRefresh() {
+            if (refreshTimer) clearInterval(refreshTimer);
+            refreshTimer = setInterval(() => syncThingSpeakAndPersist(false), refreshInterval);
+        }
+
+        function toggleActuator(type) {
+            activeActuators[type] = !activeActuators[type];
+            const active = activeActuators[type];
+
+            const btn = document.getElementById(`btn-${type}`);
+            const badge = document.getElementById(`badge-${type}`);
+            const icon = document.getElementById(`icon-${type}`);
+
+            if (active) {
+                btn.className = "actuator-btn p-3.5 bg-emerald-500/10 border border-emerald-500/40 rounded-xl flex items-center justify-between text-left transition-all";
+                badge.className = "text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono font-bold";
+                badge.textContent = "ON";
+                icon.className = "w-4 h-4 text-emerald-400";
+            } else {
+                btn.className = "actuator-btn p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600";
+                badge.className = "text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 font-mono";
+                badge.textContent = "OFF";
+                icon.className = "w-4 h-4 text-slate-400";
+            }
+        }
+
+        function bindEvents() {
+            document.getElementById("btn-open-fields").addEventListener("click", openConfigModal);
+            document.getElementById("btn-close-modal").addEventListener("click", closeConfigModal);
+            document.getElementById("btn-cancel-modal").addEventListener("click", closeConfigModal);
+            document.getElementById("btn-add-field").addEventListener("click", addFieldRow);
+            document.getElementById("config-form").addEventListener("submit", saveFieldPreferences);
+
+            document.getElementById("btn-reset-fields").addEventListener("click", () => {
+                localStorage.removeItem("farmbot_field_preferences");
+                activeFields = structuredClone(APP_CONFIG.defaultFields || []);
+                openConfigModal();
+            });
+
+            document.getElementById("btn-force-sync").addEventListener("click", async () => {
+                await loadHistoryFromFirestore();
+                await syncThingSpeakAndPersist(true);
+            });
+
+            document.getElementById("auto-refresh-select").addEventListener("change", (e) => {
+                refreshInterval = parseInt(e.target.value, 10);
+                startAutoRefresh();
+            });
+
+            document.querySelectorAll(".actuator-btn").forEach(btn => {
+                btn.addEventListener("click", () => toggleActuator(btn.dataset.actuator));
+            });
+        }
+    </script>
+</body>
+</html>
