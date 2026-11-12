@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Farm Bot - ThingSpeak IoT Dashboard</title>
+    <title>Smart Farm Bot - Enterprise IoT Telemetry</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -61,21 +61,29 @@
             </div>
             <div>
                 <h1 class="font-bold text-lg text-white flex items-center gap-2">
-                    Smart Farm Bot <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">ThingSpeak Live</span>
+                    Smart Farm Bot 
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">ThingSpeak + Firebase</span>
                 </h1>
-                <p class="text-xs text-slate-400">ThingSpeak REST Channel Telemetry</p>
+                <p class="text-xs text-slate-400">Persistent Cloud Telemetry & Edge Analytics</p>
             </div>
         </div>
 
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
+            <!-- Firebase Persistence Status -->
             <div class="flex items-center gap-2 text-xs bg-slate-800/90 border border-slate-700/60 px-3 py-1.5 rounded-lg">
-                <span id="status-indicator" class="w-2.5 h-2.5 rounded-full bg-slate-500 animate-pulse"></span>
-                <span id="status-text" class="text-slate-300 font-medium">Initializing...</span>
+                <span id="fb-status-indicator" class="w-2.5 h-2.5 rounded-full bg-slate-500 animate-pulse"></span>
+                <span id="fb-status-text" class="text-slate-300 font-medium">DB: Connecting...</span>
             </div>
 
-            <button onclick="openConfigModal()" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs px-3.5 py-2 rounded-lg transition-all shadow-lg shadow-emerald-600/20 active:scale-95">
-                <i data-lucide="settings" class="w-4 h-4"></i>
-                <span>Configure API & Fields</span>
+            <!-- ThingSpeak Live Status -->
+            <div class="flex items-center gap-2 text-xs bg-slate-800/90 border border-slate-700/60 px-3 py-1.5 rounded-lg">
+                <span id="status-indicator" class="w-2.5 h-2.5 rounded-full bg-slate-500 animate-pulse"></span>
+                <span id="status-text" class="text-slate-300 font-medium">API: Initializing...</span>
+            </div>
+
+            <button id="btn-open-fields" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs px-3.5 py-2 rounded-lg transition-all shadow-lg shadow-emerald-600/20 active:scale-95">
+                <i data-lucide="sliders" class="w-4 h-4"></i>
+                <span>Configure Fields</span>
             </button>
         </div>
     </header>
@@ -83,23 +91,20 @@
     <!-- MAIN CONTAINER -->
     <main class="flex-1 p-4 lg:p-8 max-w-[1600px] w-full mx-auto space-y-6">
 
-        <!-- CONFIG WARNING IF NO CHANNEL SET -->
-        <div id="no-config-alert" class="hidden glass-card border-amber-500/30 bg-amber-500/10 p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
-            <div class="flex items-center gap-4">
-                <div class="p-3 bg-amber-500/20 text-amber-400 rounded-xl">
-                    <i data-lucide="alert-triangle" class="w-6 h-6"></i>
-                </div>
-                <div>
-                    <h3 class="font-semibold text-amber-200 text-sm">ThingSpeak Channel Not Configured</h3>
-                    <p class="text-xs text-slate-300 mt-0.5">Enter your ThingSpeak Channel ID and API Read Key to display your live sensor telemetry.</p>
-                </div>
+        <!-- CONFIG.JS WARNING BANNER -->
+        <div id="no-config-alert" class="hidden glass-card border-amber-500/30 bg-amber-500/10 p-5 rounded-2xl flex items-center gap-4">
+            <div class="p-3 bg-amber-500/20 text-amber-400 rounded-xl">
+                <i data-lucide="alert-triangle" class="w-6 h-6"></i>
             </div>
-            <button onclick="openConfigModal()" class="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs rounded-lg transition-all whitespace-nowrap">
-                Set Channel Keys
-            </button>
+            <div>
+                <h3 class="font-semibold text-amber-200 text-sm">Missing Credentials in <code class="font-mono bg-slate-900/80 px-1.5 py-0.5 rounded">config.js</code></h3>
+                <p id="config-alert-msg" class="text-xs text-slate-300 mt-0.5">
+                    Please populate <code class="font-mono">APP_CONFIG.thingspeak.channelId</code> and <code class="font-mono">APP_CONFIG.firebase</code> inside <code class="font-mono">config.js</code>.
+                </p>
+            </div>
         </div>
 
-        <!-- TELEMETRY METRICS CARDS (Dynamic Grid) -->
+        <!-- TELEMETRY METRICS CARDS -->
         <div id="metrics-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <!-- Rendered dynamically based on configured fields -->
         </div>
@@ -109,19 +114,19 @@
             <div class="flex flex-wrap justify-between items-center gap-4 border-b border-slate-800 pb-4">
                 <div class="flex items-center gap-2.5">
                     <i data-lucide="line-chart" class="w-5 h-5 text-emerald-400"></i>
-                    <h2 class="font-semibold text-white text-base">ThingSpeak Time-Series Analysis</h2>
+                    <h2 class="font-semibold text-white text-base">Retained Time-Series Analysis</h2>
                 </div>
-                <div class="flex items-center gap-3">
-                    <span id="historical-count-tag" class="text-xs text-emerald-400 font-mono bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">0 Historical Points</span>
+                <div class="flex flex-wrap items-center gap-3">
+                    <span id="historical-count-tag" class="text-xs text-emerald-400 font-mono bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">0 Retained Points</span>
                     <div class="flex items-center gap-1.5 bg-slate-800/80 border border-slate-700/80 rounded-lg px-2 py-1">
-                        <span class="text-xs text-slate-400">Refresh:</span>
-                        <select id="auto-refresh-select" onchange="updateRefreshInterval(this.value)" class="bg-transparent text-xs text-slate-200 focus:outline-none">
+                        <span class="text-xs text-slate-400">Poll Rate:</span>
+                        <select id="auto-refresh-select" class="bg-transparent text-xs text-slate-200 focus:outline-none">
                             <option value="15000" class="bg-slate-900" selected>15 seconds</option>
                             <option value="30000" class="bg-slate-900">30 seconds</option>
                             <option value="60000" class="bg-slate-900">1 minute</option>
                         </select>
                     </div>
-                    <button onclick="fetchLiveData(true)" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-all border border-slate-700" title="Reload All Data">
+                    <button id="btn-force-sync" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-all border border-slate-700" title="Force Full Sync (Firebase + ThingSpeak)">
                         <i data-lucide="refresh-cw" class="w-4 h-4"></i>
                     </button>
                 </div>
@@ -145,7 +150,7 @@
                     </div>
 
                     <div class="grid grid-cols-2 gap-3">
-                        <button onclick="toggleActuator('pump')" id="btn-pump" class="p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600">
+                        <button data-actuator="pump" id="btn-pump" class="actuator-btn p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600">
                             <div class="flex items-center gap-2.5">
                                 <i data-lucide="droplet" class="w-4 h-4 text-slate-400" id="icon-pump"></i>
                                 <span class="text-xs font-medium text-slate-200">Water Pump</span>
@@ -153,7 +158,7 @@
                             <span id="badge-pump" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 font-mono">OFF</span>
                         </button>
 
-                        <button onclick="toggleActuator('uv')" id="btn-uv" class="p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600">
+                        <button data-actuator="uv" id="btn-uv" class="actuator-btn p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600">
                             <div class="flex items-center gap-2.5">
                                 <i data-lucide="sun" class="w-4 h-4 text-slate-400" id="icon-uv"></i>
                                 <span class="text-xs font-medium text-slate-200">UV Sterilizer</span>
@@ -161,7 +166,7 @@
                             <span id="badge-uv" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 font-mono">OFF</span>
                         </button>
 
-                        <button onclick="toggleActuator('repeller')" id="btn-repeller" class="p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600">
+                        <button data-actuator="repeller" id="btn-repeller" class="actuator-btn p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600">
                             <div class="flex items-center gap-2.5">
                                 <i data-lucide="volume-2" class="w-4 h-4 text-slate-400" id="icon-repeller"></i>
                                 <span class="text-xs font-medium text-slate-200">Pest Repeller</span>
@@ -169,7 +174,7 @@
                             <span id="badge-repeller" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 font-mono">OFF</span>
                         </button>
 
-                        <button onclick="toggleActuator('lights')" id="btn-lights" class="p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600">
+                        <button data-actuator="lights" id="btn-lights" class="actuator-btn p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600">
                             <div class="flex items-center gap-2.5">
                                 <i data-lucide="lightbulb" class="w-4 h-4 text-slate-400" id="icon-lights"></i>
                                 <span class="text-xs font-medium text-slate-200">Headlights</span>
@@ -179,9 +184,15 @@
                     </div>
                 </div>
 
-                <div class="pt-3 border-t border-slate-800/80 text-[11px] text-slate-400 flex items-center justify-between">
-                    <span>ThingSpeak Sync:</span>
-                    <span id="last-update-time" class="font-mono text-slate-300">Never</span>
+                <div class="pt-3 border-t border-slate-800/80 space-y-1 text-[11px] text-slate-400">
+                    <div class="flex items-center justify-between">
+                        <span>Last ThingSpeak Poll:</span>
+                        <span id="last-update-time" class="font-mono text-slate-300">Never</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span>Last Firestore Archival:</span>
+                        <span id="last-db-sync-time" class="font-mono text-emerald-400">Pending</span>
+                    </div>
                 </div>
             </div>
 
@@ -190,7 +201,7 @@
                 <div class="flex justify-between items-center border-b border-slate-800 pb-3">
                     <div class="flex items-center gap-2.5">
                         <i data-lucide="database" class="w-5 h-5 text-emerald-400"></i>
-                        <h2 class="font-semibold text-white text-base">Historical Entry Records</h2>
+                        <h2 class="font-semibold text-white text-base">Persisted Entry Records</h2>
                     </div>
                     <span id="log-count" class="text-xs text-slate-400 font-mono">0 entries</span>
                 </div>
@@ -201,12 +212,11 @@
                             <tr id="logs-table-header">
                                 <th class="py-2.5 px-3">Entry ID</th>
                                 <th class="py-2.5 px-3">Timestamp</th>
-                                <!-- Dynamic headers inserted here -->
                             </tr>
                         </thead>
                         <tbody id="logs-table-body" class="divide-y divide-slate-800 font-mono text-slate-300">
                             <tr>
-                                <td colspan="10" class="py-8 text-center text-slate-500 italic">No channel data loaded yet. Configure your ThingSpeak Channel ID.</td>
+                                <td colspan="10" class="py-8 text-center text-slate-500 italic">Loading telemetry history from Firebase & ThingSpeak...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -216,7 +226,7 @@
 
     </main>
 
-    <!-- CONFIGURATION MODAL -->
+    <!-- FIELD DISPLAY CONFIGURATION MODAL (Credentials removed) -->
     <div id="config-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
         <div class="glass-card bg-slate-900 border-slate-700 w-full max-w-2xl rounded-2xl p-6 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
             
@@ -226,41 +236,23 @@
                         <i data-lucide="sliders" class="w-5 h-5"></i>
                     </div>
                     <div>
-                        <h3 class="font-bold text-white text-lg">ThingSpeak Settings & Dynamic Fields</h3>
-                        <p class="text-xs text-slate-400">Add or remove fields to match your ThingSpeak channel feeds</p>
+                        <h3 class="font-bold text-white text-lg">Sensor Field Visualization</h3>
+                        <p class="text-xs text-slate-400">Map ThingSpeak feed keys to labels, units, and chart colors</p>
                     </div>
                 </div>
-                <button onclick="closeConfigModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+                <button type="button" id="btn-close-modal" class="text-slate-400 hover:text-white p-1 rounded-lg">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
 
-            <form id="config-form" onsubmit="saveConfiguration(event)" class="space-y-5">
-                
-                <!-- THINGSPEAK CREDENTIALS -->
-                <div class="space-y-3 bg-slate-800/40 p-4 rounded-xl border border-slate-700/60">
-                    <h4 class="text-xs font-semibold text-emerald-400 uppercase tracking-wider">ThingSpeak Channel Credentials</h4>
-                    
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs font-medium text-slate-300 mb-1">Channel ID / Channel No <span class="text-rose-400">*</span></label>
-                            <input type="text" id="cfg-channel-id" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none" placeholder="e.g. 3499273">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-slate-300 mb-1">Read API Key</label>
-                            <input type="text" id="cfg-read-key" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none" placeholder="Required for private channels">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- DYNAMIC FIELD SETTINGS (ADD / DELETE) -->
+            <form id="config-form" class="space-y-5">
                 <div class="space-y-3">
                     <div class="flex justify-between items-center">
                         <div>
-                            <h4 class="text-xs font-semibold text-slate-200 uppercase tracking-wider">Configured Fields</h4>
-                            <p class="text-[11px] text-slate-400">Only configured fields will be rendered on graphs and cards</p>
+                            <h4 class="text-xs font-semibold text-slate-200 uppercase tracking-wider">Active Telemetry Fields</h4>
+                            <p class="text-[11px] text-slate-400">API credentials are managed securely inside <code class="font-mono text-emerald-400">config.js</code></p>
                         </div>
-                        <button type="button" onclick="addFieldRow()" class="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 font-medium bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20 transition-all active:scale-95">
+                        <button type="button" id="btn-add-field" class="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 font-medium bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20 transition-all active:scale-95">
                             <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Field
                         </button>
                     </div>
@@ -274,185 +266,340 @@
                         <span class="col-span-1 text-center">Delete</span>
                     </div>
 
-                    <div id="fields-list" class="space-y-2 max-h-[240px] overflow-y-auto pr-1">
+                    <div id="fields-list" class="space-y-2 max-h-[260px] overflow-y-auto pr-1">
                         <!-- Dynamic Field Rows Render Here -->
                     </div>
                 </div>
 
                 <!-- FOOTER BUTTONS -->
-                <div class="flex justify-end gap-3 border-t border-slate-800 pt-4">
-                    <button type="button" onclick="closeConfigModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg">
-                        Cancel
+                <div class="flex justify-between items-center border-t border-slate-800 pt-4">
+                    <button type="button" id="btn-reset-fields" class="text-xs text-slate-400 hover:text-amber-400 transition-colors">
+                        Reset to config.js defaults
                     </button>
-                    <button type="submit" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow-lg shadow-emerald-600/20">
-                        Save & Sync Channel
-                    </button>
+                    <div class="flex gap-3">
+                        <button type="button" id="btn-cancel-modal" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow-lg shadow-emerald-600/20">
+                            Apply Display Settings
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- MAIN APP SCRIPT -->
-    <script>
-        // DEFAULT CONFIG
-        let config = {
-            baseUrl: "https://api.thingspeak.com",
-            channelId: "",
-            readKey: "",
-            fields: [
-                { key: "field1", name: "Distance (HC-SR04)", unit: "cm", color: "#f43f5e" }
-            ]
-        };
+    <!-- APPLICATION MODULE -->
+    <script type="module">
+        import { APP_CONFIG } from "./config.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+        import {
+            getFirestore,
+            collection,
+            doc,
+            getDocs,
+            writeBatch,
+            query,
+            where,
+            orderBy
+        } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 
+        // ====================================================================
+        // STATE MANAGEMENT
+        // ====================================================================
+        let db = null;
+        let activeFields = [];
         let chart = null;
         let refreshTimer = null;
         let refreshInterval = 15000;
         let activeActuators = { pump: false, uv: false, repeller: false, lights: false };
 
-        document.addEventListener("DOMContentLoaded", () => {
-            loadConfigFromStorage();
+        // Deduplicated store keyed by numeric entry_id -> feed object
+        const telemetryStore = new Map();
+
+        // ====================================================================
+        // BOOTSTRAP
+        // ====================================================================
+        document.addEventListener("DOMContentLoaded", async () => {
+            bindEvents();
+            loadFieldPreferences();
             initChart();
             renderMetricsCards();
-            refreshIcons();
+            lucide.createIcons();
 
-            if (config.channelId) {
-                fetchLiveData(true); // Load all past entries initially
-                startAutoRefresh();
-            } else {
-                showNoConfigWarning(true);
-            }
+            const validConfig = validateConfig();
+            if (!validConfig) return;
+
+            initFirebase();
+
+            // 1. Hydrate historical data from Firestore first (fast local/cloud cache)
+            await loadHistoryFromFirestore();
+
+            // 2. Fetch live/historical delta from ThingSpeak and persist new entries
+            await syncThingSpeakAndPersist(true);
+
+            // 3. Start polling loop
+            startAutoRefresh();
         });
 
-        function refreshIcons() {
-            lucide.createIcons();
+        function validateConfig() {
+            const tsId = APP_CONFIG?.thingspeak?.channelId;
+            const fbKey = APP_CONFIG?.firebase?.apiKey;
+            const fbProject = APP_CONFIG?.firebase?.projectId;
+
+            if (!tsId || tsId.includes("YOUR_")) {
+                showConfigWarning("ThingSpeak Channel ID is not set in config.js.");
+                return false;
+            }
+            if (!fbKey || fbKey.includes("YOUR_") || !fbProject || fbProject.includes("your-project")) {
+                showConfigWarning("Firebase configuration is incomplete in config.js.");
+                return false;
+            }
+            document.getElementById("no-config-alert").classList.add("hidden");
+            return true;
         }
 
-        function loadConfigFromStorage() {
-            const saved = localStorage.getItem("thingspeak_farmbot_config");
-            if (saved) {
-                try {
-                    config = JSON.parse(saved);
-                } catch(e) {
-                    console.error("Failed to load local config", e);
-                }
+        function showConfigWarning(message) {
+            const alertBox = document.getElementById("no-config-alert");
+            document.getElementById("config-alert-msg").textContent = message;
+            alertBox.classList.remove("hidden");
+            setApiStatus("bg-amber-500", "API: Unconfigured");
+            setDbStatus("bg-amber-500", "DB: Unconfigured");
+        }
+
+        function initFirebase() {
+            try {
+                const app = initializeApp(APP_CONFIG.firebase);
+                db = getFirestore(app);
+                setDbStatus("bg-emerald-500", "DB: Firestore Ready");
+            } catch (err) {
+                console.error("Firebase Initialization Error:", err);
+                setDbStatus("bg-rose-500", "DB: Init Failed");
             }
         }
 
-        function saveConfiguration(e) {
-            e.preventDefault();
-            
-            config.channelId = document.getElementById("cfg-channel-id").value.trim();
-            config.readKey = document.getElementById("cfg-read-key").value.trim();
+        // ====================================================================
+        // FIRESTORE PERSISTENCE LAYER
+        // ====================================================================
+        async function loadHistoryFromFirestore() {
+            if (!db) return;
 
-            // Parse configured fields from form
-            const rows = document.querySelectorAll(".field-config-row");
-            const newFields = [];
-            rows.forEach((row, idx) => {
-                const key = row.querySelector(".field-key-input").value.trim();
-                const name = row.querySelector(".field-name-input").value.trim() || `Field ${idx + 1}`;
-                const unit = row.querySelector(".field-unit-input").value.trim() || "";
-                const color = row.querySelector(".field-color-input").value || "#10b981";
-                
-                if (key) {
-                    newFields.push({ key, name, unit, color });
+            setDbStatus("bg-emerald-500 animate-pulse", "DB: Loading Archive...");
+            const colName = APP_CONFIG.firestoreCollection || "farmbot_telemetry";
+            const channelId = String(APP_CONFIG.thingspeak.channelId);
+
+            try {
+                const q = query(
+                    collection(db, colName),
+                    where("channel_id", "==", channelId),
+                    orderBy("entry_id", "asc")
+                );
+
+                const snapshot = await getDocs(q);
+                snapshot.forEach(docSnap => {
+                    const record = docSnap.data();
+                    if (record && record.entry_id !== undefined) {
+                        telemetryStore.set(Number(record.entry_id), record);
+                    }
+                });
+
+                renderAllTelemetry();
+                setDbStatus("bg-emerald-500", `DB: ${telemetryStore.size} Retained`);
+            } catch (err) {
+                console.error("Firestore Read Error (Check Firestore Rules / Composite Index):", err);
+                setDbStatus("bg-rose-500", "DB: Read Error");
+            }
+        }
+
+        async function persistNewFeedsToFirestore(newFeeds) {
+            if (!db || !newFeeds || newFeeds.length === 0) return;
+
+            const colName = APP_CONFIG.firestoreCollection || "farmbot_telemetry";
+            const channelId = String(APP_CONFIG.thingspeak.channelId);
+
+            // Firestore writeBatch supports up to 500 operations per batch
+            const BATCH_LIMIT = 450;
+            try {
+                for (let i = 0; i < newFeeds.length; i += BATCH_LIMIT) {
+                    const chunk = newFeeds.slice(i, i + BATCH_LIMIT);
+                    const batch = writeBatch(db);
+
+                    chunk.forEach(feed => {
+                        const entryId = Number(feed.entry_id);
+                        // Deterministic doc ID prevents duplicates across refreshes/clients
+                        const docId = `${channelId}_${entryId}`;
+                        const docRef = doc(db, colName, docId);
+
+                        batch.set(docRef, {
+                            ...feed,
+                            entry_id: entryId,
+                            channel_id: channelId,
+                            synced_at: new Date().toISOString()
+                        }, { merge: true });
+                    });
+
+                    await batch.commit();
+                }
+
+                setDbStatus("bg-emerald-500", `DB: ${telemetryStore.size} Retained`);
+                document.getElementById("last-db-sync-time").textContent = new Date().toLocaleTimeString();
+            } catch (err) {
+                console.error("Firestore Batch Write Error:", err);
+                setDbStatus("bg-rose-500", "DB: Write Failed");
+            }
+        }
+
+        // ====================================================================
+        // THINGSPEAK INGESTION + DEDUPLICATION
+        // ====================================================================
+        async function syncThingSpeakAndPersist(isInitialLoad = false) {
+            const { baseUrl, channelId, readKey, initialFetchCount, pollFetchCount } = APP_CONFIG.thingspeak;
+            if (!channelId) return;
+
+            setApiStatus("bg-emerald-500 animate-pulse", "API: Fetching...");
+
+            const count = isInitialLoad ? (initialFetchCount || 8000) : (pollFetchCount || 50);
+            let url = `${baseUrl}/channels/${channelId}/feeds.json?results=${count}`;
+            if (readKey) {
+                url += `&api_key=${encodeURIComponent(readKey)}`;
+            }
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                const data = await response.json();
+                if (!data || !Array.isArray(data.feeds)) {
+                    throw new Error("Malformed ThingSpeak response payload");
+                }
+
+                // Filter out feeds already retained in telemetryStore
+                const unseenFeeds = [];
+                data.feeds.forEach(feed => {
+                    const id = Number(feed.entry_id);
+                    if (!isNaN(id) && !telemetryStore.has(id)) {
+                        const normalized = { ...feed, entry_id: id };
+                        telemetryStore.set(id, normalized);
+                        unseenFeeds.push(normalized);
+                    }
+                });
+
+                // Persist only unseen records to Firebase
+                if (unseenFeeds.length > 0) {
+                    await persistNewFeedsToFirestore(unseenFeeds);
+                } else {
+                    document.getElementById("last-db-sync-time").textContent = `Up to date (${new Date().toLocaleTimeString()})`;
+                }
+
+                renderAllTelemetry();
+                setApiStatus("bg-emerald-500", "API: Connected");
+                document.getElementById("last-update-time").textContent = new Date().toLocaleTimeString();
+            } catch (err) {
+                console.error("ThingSpeak Sync Error:", err);
+                setApiStatus("bg-rose-500", "API: Offline / Error");
+            }
+        }
+
+        // ====================================================================
+        // UI RENDERING (CARDS, CHART, TABLE)
+        // ====================================================================
+        function renderAllTelemetry() {
+            // Sort chronologically by entry_id ascending
+            const sortedFeeds = Array.from(telemetryStore.values()).sort((a, b) => a.entry_id - b.entry_id);
+            if (sortedFeeds.length === 0) return;
+
+            document.getElementById("historical-count-tag").textContent = `${sortedFeeds.length} Retained Points`;
+
+            // 1. Update Latest Metric Cards
+            const latest = sortedFeeds[sortedFeeds.length - 1];
+            const prev = sortedFeeds.length > 1 ? sortedFeeds[sortedFeeds.length - 2] : null;
+
+            activeFields.forEach(field => {
+                const valElem = document.getElementById(`val-${field.key}`);
+                const trendElem = document.getElementById(`trend-${field.key}`);
+                const rawVal = latest[field.key];
+
+                if (valElem && rawVal !== undefined && rawVal !== null) {
+                    const numVal = parseFloat(rawVal);
+                    valElem.textContent = isNaN(numVal) ? rawVal : numVal.toFixed(1);
+
+                    if (prev && prev[field.key] !== undefined && prev[field.key] !== null) {
+                        const prevVal = parseFloat(prev[field.key]);
+                        if (!isNaN(numVal) && !isNaN(prevVal)) {
+                            const diff = numVal - prevVal;
+                            if (diff > 0) trendElem.innerHTML = `<span class="text-emerald-400">▲ +${diff.toFixed(1)}</span>`;
+                            else if (diff < 0) trendElem.innerHTML = `<span class="text-rose-400">▼ ${diff.toFixed(1)}</span>`;
+                            else trendElem.innerHTML = `<span class="text-slate-500">─ 0.0</span>`;
+                        }
+                    }
                 }
             });
 
-            config.fields = newFields;
-            localStorage.setItem("thingspeak_farmbot_config", JSON.stringify(config));
-
-            closeConfigModal();
-            renderMetricsCards();
-            updateChartStructure();
-            
-            if (config.channelId) {
-                showNoConfigWarning(false);
-                fetchLiveData(true); // reload historical
-                startAutoRefresh();
-            } else {
-                showNoConfigWarning(true);
-            }
-        }
-
-        // MODAL MANAGEMENT
-        function openConfigModal() {
-            document.getElementById("cfg-channel-id").value = config.channelId || "";
-            document.getElementById("cfg-read-key").value = config.readKey || "";
-
-            renderFieldConfigRows();
-            document.getElementById("config-modal").classList.remove("hidden");
-            refreshIcons();
-        }
-
-        function closeConfigModal() {
-            document.getElementById("config-modal").classList.add("hidden");
-        }
-
-        function renderFieldConfigRows() {
-            const container = document.getElementById("fields-list");
-            container.innerHTML = "";
-
-            if (config.fields.length === 0) {
-                addFieldRow();
-                return;
-            }
-
-            config.fields.forEach((field, index) => {
-                appendFieldRowHTML(container, field, index);
+            // 2. Update Chart
+            chart.data.labels = sortedFeeds.map(f => {
+                const d = new Date(f.created_at);
+                return `${d.toLocaleDateString([], { month: "short", day: "numeric" })} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
             });
-            refreshIcons();
+
+            chart.data.datasets.forEach(dataset => {
+                const k = dataset.fieldKey;
+                dataset.data = sortedFeeds.map(f => {
+                    const v = parseFloat(f[k]);
+                    return isNaN(v) ? null : v;
+                });
+            });
+            chart.update("none");
+
+            // 3. Update Table (Latest 25 entries)
+            renderLogsTable(sortedFeeds);
         }
 
-        function addFieldRow() {
-            const container = document.getElementById("fields-list");
-            const newIndex = container.children.length + 1;
-            const palette = ["#f43f5e", "#10b981", "#3b82f6", "#f59e0b", "#8b5cf6", "#06b6d4"];
-            const newField = {
-                key: `field${newIndex}`,
-                name: `Sensor ${newIndex}`,
-                unit: "",
-                color: palette[(newIndex - 1) % palette.length]
-            };
-            appendFieldRowHTML(container, newField, newIndex);
-            refreshIcons();
-        }
+        function renderLogsTable(sortedFeeds) {
+            const headerRow = document.getElementById("logs-table-header");
+            const tbody = document.getElementById("logs-table-body");
 
-        function appendFieldRowHTML(container, field, index) {
-            const row = document.createElement("div");
-            row.className = "field-config-row grid grid-cols-12 gap-2 items-center bg-slate-800/60 p-2 rounded-xl border border-slate-700/50";
-            row.innerHTML = `
-                <div class="col-span-3">
-                    <input type="text" value="${field.key}" placeholder="field1" class="field-key-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none">
-                </div>
-                <div class="col-span-4">
-                    <input type="text" value="${field.name}" placeholder="Field Name" class="field-name-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none">
-                </div>
-                <div class="col-span-2">
-                    <input type="text" value="${field.unit}" placeholder="cm, %" class="field-unit-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none">
-                </div>
-                <div class="col-span-2 flex justify-center">
-                    <input type="color" value="${field.color || '#10b981'}" class="field-color-input w-9 h-7 bg-transparent cursor-pointer border-0 rounded">
-                </div>
-                <div class="col-span-1 flex justify-center">
-                    <button type="button" onclick="this.closest('.field-config-row').remove()" class="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors">
-                        <i data-lucide="trash-2" class="w-4 h-4"></i>
-                    </button>
-                </div>
+            headerRow.innerHTML = `
+                <th class="py-2.5 px-3">Entry ID</th>
+                <th class="py-2.5 px-3">Timestamp</th>
+                ${activeFields.map(f => `<th class="py-2.5 px-3">${f.name} (${f.unit})</th>`).join("")}
             `;
-            container.appendChild(row);
+
+            tbody.innerHTML = "";
+            const recentFeeds = [...sortedFeeds].reverse().slice(0, 25);
+
+            recentFeeds.forEach(feed => {
+                const tr = document.createElement("tr");
+                tr.className = "hover:bg-slate-800/50 transition-colors border-b border-slate-800/50";
+
+                const formattedTime = new Date(feed.created_at).toLocaleString();
+                const fieldCols = activeFields.map(f => {
+                    const val = feed[f.key];
+                    const num = parseFloat(val);
+                    const display = (val === null || val === undefined) ? "--" : (isNaN(num) ? val : num.toFixed(1));
+                    return `<td class="py-2 px-3 text-slate-200">${display} <span class="text-[10px] text-slate-500">${f.unit}</span></td>`;
+                }).join("");
+
+                tr.innerHTML = `
+                    <td class="py-2 px-3 text-emerald-400 font-mono">#${feed.entry_id}</td>
+                    <td class="py-2 px-3 text-slate-400 whitespace-nowrap">${formattedTime}</td>
+                    ${fieldCols}
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById("log-count").textContent = `${sortedFeeds.length} retained entries`;
         }
 
-        // RENDER METRIC CARDS
         function renderMetricsCards() {
             const container = document.getElementById("metrics-grid");
             container.innerHTML = "";
 
-            if (config.fields.length === 0) {
-                container.innerHTML = `<div class="col-span-full text-center py-6 text-slate-500 text-xs italic">No fields configured. Click "Configure API & Fields" to add metrics.</div>`;
+            if (activeFields.length === 0) {
+                container.innerHTML = `<div class="col-span-full text-center py-6 text-slate-500 text-xs italic">No fields configured. Click "Configure Fields" to add metrics.</div>`;
                 return;
             }
 
-            config.fields.forEach(field => {
+            activeFields.forEach(field => {
                 const card = document.createElement("div");
                 card.className = "glass-card glass-card-hover rounded-2xl p-4 transition-all";
                 card.id = `card-${field.key}`;
@@ -466,45 +613,46 @@
                         <span class="text-xs text-slate-400 font-mono">${field.unit}</span>
                     </div>
                     <div class="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-500">
-                        <span>ThingSpeak Key: <code class="font-mono text-slate-400">${field.key}</code></span>
+                        <span>Feed Key: <code class="font-mono text-slate-400">${field.key}</code></span>
                         <span id="trend-${field.key}" class="font-mono text-slate-400">--</span>
                     </div>
                 `;
                 container.appendChild(card);
             });
-            refreshIcons();
         }
 
-        // CHART INIT
+        // ====================================================================
+        // CHART.JS SETUP
+        // ====================================================================
         function initChart() {
             const ctx = document.getElementById("telemetryChart").getContext("2d");
             chart = new Chart(ctx, {
-                type: 'line',
+                type: "line",
                 data: { labels: [], datasets: [] },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
+                    interaction: { mode: "index", intersect: false },
                     plugins: {
                         legend: {
-                            labels: { color: '#94a3b8', font: { family: 'Inter', size: 11 } }
+                            labels: { color: "#94a3b8", font: { family: "Inter", size: 11 } }
                         },
                         tooltip: {
-                            backgroundColor: '#0f172a',
-                            titleColor: '#f8fafc',
-                            bodyColor: '#cbd5e1',
-                            borderColor: '#334155',
+                            backgroundColor: "#0f172a",
+                            titleColor: "#f8fafc",
+                            bodyColor: "#cbd5e1",
+                            borderColor: "#334155",
                             borderWidth: 1
                         }
                     },
                     scales: {
                         x: {
-                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+                            grid: { color: "rgba(255, 255, 255, 0.05)" },
+                            ticks: { color: "#64748b", font: { family: "JetBrains Mono", size: 10 }, maxTicksLimit: 12 }
                         },
                         y: {
-                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+                            grid: { color: "rgba(255, 255, 255, 0.05)" },
+                            ticks: { color: "#64748b", font: { family: "JetBrains Mono", size: 10 } }
                         }
                     }
                 }
@@ -514,162 +662,133 @@
 
         function updateChartStructure() {
             if (!chart) return;
-            chart.data.labels = [];
-            chart.data.datasets = config.fields.map(field => ({
+            chart.data.datasets = activeFields.map(field => ({
                 label: `${field.name} (${field.unit})`,
                 data: [],
                 borderColor: field.color,
-                backgroundColor: field.color + '15',
+                backgroundColor: field.color + "15",
                 borderWidth: 2,
                 tension: 0.25,
                 fill: true,
-                pointRadius: 3,
+                pointRadius: 2,
                 fieldKey: field.key
             }));
             chart.update();
         }
 
-        // FETCH DATA FROM THINGSPEAK API
-        async function fetchLiveData(fetchAll = false) {
-            if (!config.channelId) {
-                showNoConfigWarning(true);
-                return;
-            }
-
-            const statusInd = document.getElementById("status-indicator");
-            const statusTxt = document.getElementById("status-text");
-            statusInd.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
-            statusTxt.textContent = "Fetching...";
-
-            // Load all historical records (up to 8000 feeds) on initial fetch
-            const resultsCount = fetchAll ? 8000 : 100;
-            let url = `${config.baseUrl}/channels/${config.channelId}/feeds.json?results=${resultsCount}`;
-            if (config.readKey) {
-                url += `&api_key=${config.readKey}`;
-            }
-
-            try {
-                const response = await fetch(url);
-                if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
-                
-                const data = await response.json();
-                if (data && data.feeds) {
-                    processFeedData(data.feeds);
-                    statusInd.className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
-                    statusTxt.textContent = "Connected";
-                    document.getElementById("last-update-time").textContent = new Date().toLocaleTimeString();
-                    showNoConfigWarning(false);
-                } else {
-                    throw new Error("Invalid ThingSpeak API Response");
-                }
-            } catch (error) {
-                console.error("ThingSpeak Fetch Error:", error);
-                statusInd.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
-                statusTxt.textContent = "Error / Offline";
-            }
-        }
-
-        function processFeedData(feeds) {
-            if (!feeds || feeds.length === 0) return;
-
-            document.getElementById("historical-count-tag").textContent = `${feeds.length} Historical Points`;
-
-            // 1. Metric Cards Update (Latest Value)
-            const latest = feeds[feeds.length - 1];
-            const prev = feeds.length > 1 ? feeds[feeds.length - 2] : null;
-
-            config.fields.forEach(field => {
-                const valElem = document.getElementById(`val-${field.key}`);
-                const trendElem = document.getElementById(`trend-${field.key}`);
-                
-                const rawVal = latest[field.key];
-                if (valElem && rawVal !== undefined && rawVal !== null) {
-                    const numVal = parseFloat(rawVal);
-                    valElem.textContent = isNaN(numVal) ? rawVal : numVal.toFixed(1);
-
-                    if (prev && prev[field.key] !== undefined) {
-                        const prevVal = parseFloat(prev[field.key]);
-                        if (!isNaN(numVal) && !isNaN(prevVal)) {
-                            const diff = numVal - prevVal;
-                            if (diff > 0) trendElem.innerHTML = `<span class="text-emerald-400">▲ +${diff.toFixed(1)}</span>`;
-                            else if (diff < 0) trendElem.innerHTML = `<span class="text-rose-400">▼ ${diff.toFixed(1)}</span>`;
-                            else trendElem.innerHTML = `<span class="text-slate-500">─ 0.0</span>`;
-                        }
+        // ====================================================================
+        // VISUAL FIELD PREFERENCES (NON-SENSITIVE UI STATE)
+        // ====================================================================
+        function loadFieldPreferences() {
+            const saved = localStorage.getItem("farmbot_field_preferences");
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        activeFields = parsed;
+                        return;
                     }
+                } catch (e) {
+                    console.warn("Corrupt field preferences in localStorage, falling back to config.js");
                 }
-            });
-
-            // 2. Plot All Feeds to Chart
-            chart.data.labels = feeds.map(f => {
-                const d = new Date(f.created_at);
-                return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-            });
-
-            chart.data.datasets.forEach(dataset => {
-                const k = dataset.fieldKey;
-                dataset.data = feeds.map(f => {
-                    const v = parseFloat(f[k]);
-                    return isNaN(v) ? null : v;
-                });
-            });
-
-            chart.update();
-
-            // 3. Render Table
-            renderLogsTable(feeds);
+            }
+            activeFields = structuredClone(APP_CONFIG.defaultFields || []);
         }
 
-        function renderLogsTable(feeds) {
-            const headerRow = document.getElementById("logs-table-header");
-            const tbody = document.getElementById("logs-table-body");
+        function saveFieldPreferences(e) {
+            e.preventDefault();
+            const rows = document.querySelectorAll(".field-config-row");
+            const updated = [];
 
-            // Rebuild Table Headers strictly for Configured Fields
-            headerRow.innerHTML = `
-                <th class="py-2.5 px-3">Entry ID</th>
-                <th class="py-2.5 px-3">Timestamp</th>
-                ${config.fields.map(f => `<th class="py-2.5 px-3">${f.name} (${f.unit})</th>`).join("")}
+            rows.forEach((row, idx) => {
+                const key = row.querySelector(".field-key-input").value.trim();
+                const name = row.querySelector(".field-name-input").value.trim() || `Sensor ${idx + 1}`;
+                const unit = row.querySelector(".field-unit-input").value.trim() || "";
+                const color = row.querySelector(".field-color-input").value || "#10b981";
+                if (key) updated.push({ key, name, unit, color });
+            });
+
+            activeFields = updated;
+            localStorage.setItem("farmbot_field_preferences", JSON.stringify(activeFields));
+
+            closeConfigModal();
+            renderMetricsCards();
+            updateChartStructure();
+            renderAllTelemetry();
+        }
+
+        function openConfigModal() {
+            const container = document.getElementById("fields-list");
+            container.innerHTML = "";
+
+            if (activeFields.length === 0) {
+                addFieldRow();
+            } else {
+                activeFields.forEach(field => appendFieldRowHTML(container, field));
+            }
+            document.getElementById("config-modal").classList.remove("hidden");
+            lucide.createIcons();
+        }
+
+        function closeConfigModal() {
+            document.getElementById("config-modal").classList.add("hidden");
+        }
+
+        function addFieldRow() {
+            const container = document.getElementById("fields-list");
+            const idx = container.children.length + 1;
+            const palette = ["#f43f5e", "#10b981", "#3b82f6", "#f59e0b", "#8b5cf6", "#06b6d4"];
+            appendFieldRowHTML(container, {
+                key: `field${idx}`,
+                name: `Sensor ${idx}`,
+                unit: "",
+                color: palette[(idx - 1) % palette.length]
+            });
+            lucide.createIcons();
+        }
+
+        function appendFieldRowHTML(container, field) {
+            const row = document.createElement("div");
+            row.className = "field-config-row grid grid-cols-12 gap-2 items-center bg-slate-800/60 p-2 rounded-xl border border-slate-700/50";
+            row.innerHTML = `
+                <div class="col-span-3">
+                    <input type="text" value="${field.key}" placeholder="field1" class="field-key-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none">
+                </div>
+                <div class="col-span-4">
+                    <input type="text" value="${field.name}" placeholder="Field Name" class="field-name-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none">
+                </div>
+                <div class="col-span-2">
+                    <input type="text" value="${field.unit}" placeholder="cm, %" class="field-unit-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none">
+                </div>
+                <div class="col-span-2 flex justify-center">
+                    <input type="color" value="${field.color || "#10b981"}" class="field-color-input w-9 h-7 bg-transparent cursor-pointer border-0 rounded">
+                </div>
+                <div class="col-span-1 flex justify-center">
+                    <button type="button" class="btn-delete-field p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </div>
             `;
-
-            tbody.innerHTML = "";
-            const reversedFeeds = [...feeds].reverse().slice(0, 15); // Show latest 15 in table
-
-            reversedFeeds.forEach(feed => {
-                const tr = document.createElement("tr");
-                tr.className = "hover:bg-slate-800/50 transition-colors border-b border-slate-800/50";
-                
-                const formattedTime = new Date(feed.created_at).toLocaleString();
-                const fieldCols = config.fields.map(f => {
-                    const val = feed[f.key];
-                    const num = parseFloat(val);
-                    const display = (val === null || val === undefined) ? '--' : (isNaN(num) ? val : num.toFixed(1));
-                    return `<td class="py-2 px-3 text-slate-200">${display} <span class="text-[10px] text-slate-500">${f.unit}</span></td>`;
-                }).join("");
-
-                tr.innerHTML = `
-                    <td class="py-2 px-3 text-emerald-400 font-mono">#${feed.entry_id}</td>
-                    <td class="py-2 px-3 text-slate-400 whitespace-nowrap">${formattedTime}</td>
-                    ${fieldCols}
-                `;
-                tbody.appendChild(tr);
-            });
-
-            document.getElementById("log-count").textContent = `${feeds.length} total entries`;
+            row.querySelector(".btn-delete-field").addEventListener("click", () => row.remove());
+            container.appendChild(row);
         }
 
-        function showNoConfigWarning(show) {
-            const alert = document.getElementById("no-config-alert");
-            if (show) alert.classList.remove("hidden");
-            else alert.classList.add("hidden");
+        // ====================================================================
+        // HELPERS & EVENT BINDINGS
+        // ====================================================================
+        function setApiStatus(dotClasses, text) {
+            document.getElementById("status-indicator").className = `w-2.5 h-2.5 rounded-full ${dotClasses}`;
+            document.getElementById("status-text").textContent = text;
+        }
+
+        function setDbStatus(dotClasses, text) {
+            document.getElementById("fb-status-indicator").className = `w-2.5 h-2.5 rounded-full ${dotClasses}`;
+            document.getElementById("fb-status-text").textContent = text;
         }
 
         function startAutoRefresh() {
             if (refreshTimer) clearInterval(refreshTimer);
-            refreshTimer = setInterval(() => fetchLiveData(false), refreshInterval);
-        }
-
-        function updateRefreshInterval(val) {
-            refreshInterval = parseInt(val);
-            startAutoRefresh();
+            refreshTimer = setInterval(() => syncThingSpeakAndPersist(false), refreshInterval);
         }
 
         function toggleActuator(type) {
@@ -681,16 +800,44 @@
             const icon = document.getElementById(`icon-${type}`);
 
             if (active) {
-                btn.className = "p-3.5 bg-emerald-500/10 border border-emerald-500/40 rounded-xl flex items-center justify-between text-left transition-all";
+                btn.className = "actuator-btn p-3.5 bg-emerald-500/10 border border-emerald-500/40 rounded-xl flex items-center justify-between text-left transition-all";
                 badge.className = "text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono font-bold";
                 badge.textContent = "ON";
                 icon.className = "w-4 h-4 text-emerald-400";
             } else {
-                btn.className = "p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600";
+                btn.className = "actuator-btn p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl flex items-center justify-between text-left transition-all hover:border-slate-600";
                 badge.className = "text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 font-mono";
                 badge.textContent = "OFF";
                 icon.className = "w-4 h-4 text-slate-400";
             }
+        }
+
+        function bindEvents() {
+            document.getElementById("btn-open-fields").addEventListener("click", openConfigModal);
+            document.getElementById("btn-close-modal").addEventListener("click", closeConfigModal);
+            document.getElementById("btn-cancel-modal").addEventListener("click", closeConfigModal);
+            document.getElementById("btn-add-field").addEventListener("click", addFieldRow);
+            document.getElementById("config-form").addEventListener("submit", saveFieldPreferences);
+
+            document.getElementById("btn-reset-fields").addEventListener("click", () => {
+                localStorage.removeItem("farmbot_field_preferences");
+                activeFields = structuredClone(APP_CONFIG.defaultFields || []);
+                openConfigModal();
+            });
+
+            document.getElementById("btn-force-sync").addEventListener("click", async () => {
+                await loadHistoryFromFirestore();
+                await syncThingSpeakAndPersist(true);
+            });
+
+            document.getElementById("auto-refresh-select").addEventListener("change", (e) => {
+                refreshInterval = parseInt(e.target.value, 10);
+                startAutoRefresh();
+            });
+
+            document.querySelectorAll(".actuator-btn").forEach(btn => {
+                btn.addEventListener("click", () => toggleActuator(btn.dataset.actuator));
+            });
         }
     </script>
 </body>
