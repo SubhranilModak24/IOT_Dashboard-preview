@@ -52,7 +52,9 @@ export async function loadConfig() {
             thingspeak: { baseUrl: "https://api.thingspeak.com", channelId: "", readKey: "", initialFetchCount: 8000, pollFetchCount: 50 },
             firebase: { apiKey: "", authDomain: "", projectId: "", storageBucket: "", messagingSenderId: "", appId: "" },
             firestoreCollection: "farmbot_telemetry",
-            defaultFields: [{ key: "field1", name: "Distance (HC-SR04)", unit: "cm", color: "#f43f5e" }]
+            defaultFields: [{ key: "field1", name: "Temperature", unit: "C", color: "#f43f5e" },
+                           { key: "field2", name: "Humidity", unit: "%", color: "#f43f5e" },
+                           { key: "field3", name: "Soil Moisture", unit: "%", color: "#f43f5e" }]
         };
     }
 }
